@@ -118,8 +118,8 @@ const FaceExpression = () => {
         await navigator.mediaDevices.getUserMedia(
           {
             video: {
-              width: 640,
-              height: 480,
+              width: 200,
+              height: 240,
               facingMode: "user",
             },
             audio: false,
@@ -497,28 +497,21 @@ const FaceExpression = () => {
 
         justifyContent: "center",
 
-        padding: "30px 20px",
+        padding: "10px 15px",
 
         boxSizing: "border-box",
       }}
     >
       {/* TITLE */}
 
-      <h1
-        style={{
-          marginBottom: "8px",
-        }}
-      >
-        Face Expression Detector
-      </h1>
 
       <p
         style={{
-          color: "#aaa",
+          color: "#1b399b",
 
           marginTop: 0,
 
-          marginBottom: "25px",
+          marginBottom: "5px",
         }}
       >
         Detect your facial expression
@@ -534,13 +527,13 @@ const FaceExpression = () => {
             color: "#ff7070",
 
             padding:
-              "12px 18px",
+              "7px 12px",
 
             borderRadius:
               "10px",
 
             marginBottom:
-              "20px",
+              "10px",
 
             textAlign:
               "center",
@@ -554,11 +547,11 @@ const FaceExpression = () => {
 
       <div
         style={{
-          width: "500px",
+          width: "80vh",
 
           maxWidth: "100%",
 
-          height: "400px",
+          height: "60vh",
 
           background: "#111",
 
@@ -627,10 +620,10 @@ const FaceExpression = () => {
           }
 
           style={{
-            marginTop: "25px",
+            marginTop: "5px",
 
             padding:
-              "14px 32px",
+              "5px 5px",
 
             border: "none",
 
@@ -646,7 +639,7 @@ const FaceExpression = () => {
               "17px",
 
             fontWeight:
-              "600",
+              "500",
 
             cursor:
               "pointer",
@@ -674,7 +667,7 @@ const FaceExpression = () => {
           <div
             style={{
               fontSize:
-                "42px",
+                "30px",
 
               fontWeight:
                 "bold",
