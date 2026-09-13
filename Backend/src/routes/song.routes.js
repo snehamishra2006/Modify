@@ -1,12 +1,23 @@
 const express = require("express")
-const upload = require("../middlewares/upload.middleware")
+const { uploadSongFiles } = require("../middlewares/upload.middleware")
 const songController = require("../controllers/song.controller")
+const { authUser, optionalAuth } = require("../middlewares/auth.middleware")
+
 const router = express.Router()
 
+// POST /api/songs - upload song (authenticated or with optional user identification)
+router.post("/", optionalAuth, uploadSongFiles, songController.uploadSong)
 
-// POST  /api/songs/
-router.post("/",upload.single('song'),songController.uploadSong)
+// GET /api/songs - get random/recommended song by mood
+router.get("/", songController.getSong)
 
-router.get("/",songController.getSong)
+// GET /api/songs/all - explore full song library with mood & search filters
+router.get("/all", songController.getAllSongs)
 
-module.exports = router;
+// GET /api/songs/my-songs - get songs uploaded by logged-in user
+router.get("/my-songs", authUser, songController.getMySongs)
+
+// DELETE /api/songs/:id - delete a song
+router.delete("/:id", authUser, songController.deleteSong)
+
+module.exports = router

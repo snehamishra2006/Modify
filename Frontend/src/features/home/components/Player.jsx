@@ -1,72 +1,100 @@
-import React, { useRef, useState, useEffect, useContext } from 'react'
-import { SongContext } from '../song.context'
-import { useSong } from '../hooks/useSong'
-import './player.scss'
+import React, { useRef, useState, useEffect } from "react"
+import { useSong } from "../hooks/useSong"
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, RotateCcw, RotateCw, Gauge, ListMusic } from "lucide-react"
+import "./player.scss"
 
 const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2]
 
 const formatTime = (seconds) => {
-    if (isNaN(seconds)) return '0:00'
+    if (isNaN(seconds) || seconds < 0) return "0:00"
     const m = Math.floor(seconds / 60)
-    const s = Math.floor(seconds % 60).toString().padStart(2, '0')
+    const s = Math.floor(seconds % 60).toString().padStart(2, "0")
     return `${m}:${s}`
 }
 
 const Player = () => {
-    const { song } = useSong()
-
-    console.log('song in Player:', song)   // 👈 add this
-
+    const { song, isPlaying, setIsPlaying, playNext, playPrevious, setIsLibraryModalOpen } = useSong()
 
     const audioRef = useRef(null)
     const progressRef = useRef(null)
 
-    const [isPlaying, setIsPlaying] = useState(false)
     const [currentTime, setCurrentTime] = useState(0)
     const [duration, setDuration] = useState(0)
     const [speed, setSpeed] = useState(1)
-    const [volume, setVolume] = useState(1)
+    const [volume, setVolume] = useState(0.85)
     const [showSpeed, setShowSpeed] = useState(false)
     const [isMuted, setIsMuted] = useState(false)
 
-    // Reset player when song changes
+    // Handle song change & autoplay
     useEffect(() => {
-        if (audioRef.current) {
-            audioRef.current.load()
-            setIsPlaying(false)
-            setCurrentTime(0)
+        if (!audioRef.current || !song?.url) return
+
+        audioRef.current.load()
+        setCurrentTime(0)
+
+        if (isPlaying) {
+            const playPromise = audioRef.current.play()
+            if (playPromise !== undefined) {
+                playPromise.catch((err) => {
+                    console.warn("Autoplay was prevented by browser policy:", err.message)
+                    setIsPlaying(false)
+                })
+            }
         }
-    }, [song?.url])
+    }, [song?.url, song?._id])
+
+    // Sync external isPlaying state changes
+    useEffect(() => {
+        if (!audioRef.current) return
+        if (isPlaying) {
+            audioRef.current.play().catch((err) => {
+                console.warn("Audio play error:", err.message)
+            })
+        } else {
+            audioRef.current.pause()
+        }
+    }, [isPlaying])
 
     const togglePlay = () => {
-        const audio = audioRef.current
-        if (!audio) return
+        if (!audioRef.current) return
         if (isPlaying) {
-            audio.pause()
+            audioRef.current.pause()
+            setIsPlaying(false)
         } else {
-            audio.play()
+            audioRef.current.play().then(() => {
+                setIsPlaying(true)
+            }).catch((err) => {
+                console.warn("Play error:", err.message)
+            })
         }
-        setIsPlaying(!isPlaying)
     }
 
     const skip = (secs) => {
-        const audio = audioRef.current
-        if (!audio) return
-        audio.currentTime = Math.min(Math.max(audio.currentTime + secs, 0), duration)
+        if (!audioRef.current) return
+        const newTime = Math.min(Math.max(audioRef.current.currentTime + secs, 0), duration || 100)
+        audioRef.current.currentTime = newTime
+        setCurrentTime(newTime)
     }
 
     const handleTimeUpdate = () => {
-        setCurrentTime(audioRef.current.currentTime)
+        if (audioRef.current) {
+            setCurrentTime(audioRef.current.currentTime)
+        }
     }
 
     const handleLoadedMetadata = () => {
-        setDuration(audioRef.current.duration)
+        if (audioRef.current) {
+            setDuration(audioRef.current.duration)
+            audioRef.current.volume = isMuted ? 0 : volume
+            audioRef.current.playbackRate = speed
+        }
     }
 
     const handleProgressClick = (e) => {
+        if (!progressRef.current || !audioRef.current || !duration) return
         const bar = progressRef.current
         const rect = bar.getBoundingClientRect()
-        const ratio = (e.clientX - rect.left) / rect.width
+        const ratio = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1))
         const newTime = ratio * duration
         audioRef.current.currentTime = newTime
         setCurrentTime(newTime)
@@ -74,39 +102,45 @@ const Player = () => {
 
     const handleSpeedChange = (s) => {
         setSpeed(s)
-        audioRef.current.playbackRate = s
+        if (audioRef.current) {
+            audioRef.current.playbackRate = s
+        }
         setShowSpeed(false)
     }
 
     const handleVolume = (e) => {
         const val = parseFloat(e.target.value)
         setVolume(val)
-        audioRef.current.volume = val
+        if (audioRef.current) {
+            audioRef.current.volume = val
+        }
         setIsMuted(val === 0)
     }
 
     const toggleMute = () => {
-        const audio = audioRef.current
+        if (!audioRef.current) return
         if (isMuted) {
-            audio.volume = volume || 0.5
+            audioRef.current.volume = volume || 0.5
             setIsMuted(false)
         } else {
-            audio.volume = 0
+            audioRef.current.volume = 0
             setIsMuted(true)
         }
     }
 
     const handleSongEnd = () => {
-        setIsPlaying(false)
-        setCurrentTime(0)
+        // Auto play next song in library/queue
+        playNext()
     }
 
     const progress = duration ? (currentTime / duration) * 100 : 0
 
     if (!song) return null
 
+    const poster = song.posterUrl || song.postUrl || "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400"
+
     return (
-        <div className="player">
+        <div className={`player-dock mood-${song.mood || "neutral"}`}>
             <audio
                 ref={audioRef}
                 src={song.url}
@@ -115,114 +149,134 @@ const Player = () => {
                 onEnded={handleSongEnd}
             />
 
-            {/* Poster + Info */}
-            <div className="player__info">
-                <img
-                    className="player__poster"
-                    src={song.posterUrl}
-                    alt={song.title}
-                />
-                <div className="player__meta">
-                    <p className="player__title">{song.title}</p>
-                    <span className="player__mood">{song.mood}</span>
-                </div>
-            </div>
-
-            {/* Progress bar */}
-            <div className="player__progress-wrap">
-                <span className="player__time">{formatTime(currentTime)}</span>
-                <div
-                    className="player__progress"
-                    ref={progressRef}
-                    onClick={handleProgressClick}
-                >
-                    <div className="player__progress-fill" style={{ width: `${progress}%` }} />
-                    <div className="player__progress-thumb" style={{ left: `${progress}%` }} />
-                </div>
-                <span className="player__time">{formatTime(duration)}</span>
-            </div>
-
-            {/* Controls */}
-            <div className="player__controls">
-
-                {/* Speed picker */}
-                <div className="player__speed-wrap">
-                    <button
-                        className="player__btn player__btn--speed"
-                        onClick={() => setShowSpeed(!showSpeed)}
-                        title="Playback speed"
-                    >
-                        {speed}×
-                    </button>
-                    {showSpeed && (
-                        <div className="player__speed-menu">
-                            {SPEED_OPTIONS.map((s) => (
-                                <button
-                                    key={s}
-                                    className={`player__speed-option ${s === speed ? 'active' : ''}`}
-                                    onClick={() => handleSpeedChange(s)}
-                                >
-                                    {s}×
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                {/* Backward 5s */}
-                <button className="player__btn player__btn--skip" onClick={() => skip(-5)} title="Back 5s">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
-                        <path d="M1 4v6h6"/>
-                        <path d="M3.51 15a9 9 0 1 0 .49-3.6"/>
-                    </svg>
-                    <span>5s</span>
-                </button>
-
-                {/* Play / Pause */}
-                <button className="player__btn player__btn--play" onClick={togglePlay} title={isPlaying ? 'Pause' : 'Play'}>
-                    {isPlaying ? (
-                        <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28">
-                            <rect x="6" y="4" width="4" height="16" rx="1"/>
-                            <rect x="14" y="4" width="4" height="16" rx="1"/>
-                        </svg>
-                    ) : (
-                        <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28">
-                            <path d="M8 5.14v14l11-7-11-7z"/>
-                        </svg>
-                    )}
-                </button>
-
-                {/* Forward 5s */}
-                <button className="player__btn player__btn--skip" onClick={() => skip(5)} title="Forward 5s">
-                    <span>5s</span>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
-                        <path d="M23 4v6h-6"/>
-                        <path d="M20.49 15a9 9 0 1 1-.49-3.6"/>
-                    </svg>
-                </button>
-
-                {/* Volume */}
-                <div className="player__volume">
-                    <button className="player__btn player__btn--vol" onClick={toggleMute} title="Mute">
-                        {isMuted || volume === 0 ? (
-                            <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-                                <path d="M16.5 12A4.5 4.5 0 0 0 14 7.97v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.87 8.87 0 0 0 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06A8.99 8.99 0 0 0 17.73 18L19 19.27 20.27 18 5.27 3 4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
-                            </svg>
-                        ) : (
-                            <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-                                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
-                            </svg>
+            <div className="player-inner">
+                {/* ── 1. Song Info & Poster ── */}
+                <div className="player-meta-section">
+                    <div className="poster-container">
+                        <img className="player-poster" src={poster} alt={song.title} />
+                        {isPlaying && (
+                            <div className="mini-equalizer">
+                                <span className="eq-bar bar-1"></span>
+                                <span className="eq-bar bar-2"></span>
+                                <span className="eq-bar bar-3"></span>
+                            </div>
                         )}
+                    </div>
+                    <div className="player-details">
+                        <p className="song-title" title={song.title}>{song.title}</p>
+                        <div className="song-subline">
+                            <span className="song-artist">{song.artist || "Unknown Artist"}</span>
+                            {song.mood && (
+                                <span className={`mood-badge mood-${song.mood}`}>
+                                    {song.mood}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* ── 2. Playback Controls & Progress Bar ── */}
+                <div className="player-center-section">
+                    <div className="control-buttons-row">
+                        {/* Skip Backward 5s */}
+                        <button className="ctrl-btn ctrl-btn--skip" onClick={() => skip(-5)} title="Rewind 5s">
+                            <RotateCcw size={16} />
+                            <span className="skip-tag">5s</span>
+                        </button>
+
+                        {/* Previous Track */}
+                        <button className="ctrl-btn ctrl-btn--nav" onClick={playPrevious} title="Previous track">
+                            <SkipBack size={18} />
+                        </button>
+
+                        {/* Big Play / Pause */}
+                        <button
+                            className={`ctrl-btn ctrl-btn--play ${isPlaying ? "is-playing" : ""}`}
+                            onClick={togglePlay}
+                            title={isPlaying ? "Pause" : "Play"}
+                        >
+                            {isPlaying ? <Pause size={22} /> : <Play size={22} className="play-triangle" />}
+                        </button>
+
+                        {/* Next Track */}
+                        <button className="ctrl-btn ctrl-btn--nav" onClick={playNext} title="Next track">
+                            <SkipForward size={18} />
+                        </button>
+
+                        {/* Skip Forward 5s */}
+                        <button className="ctrl-btn ctrl-btn--skip" onClick={() => skip(5)} title="Forward 5s">
+                            <RotateCw size={16} />
+                            <span className="skip-tag">5s</span>
+                        </button>
+                    </div>
+
+                    {/* Progress Slider */}
+                    <div className="progress-slider-wrap">
+                        <span className="time-display">{formatTime(currentTime)}</span>
+                        <div
+                            className="progress-bar-container"
+                            ref={progressRef}
+                            onClick={handleProgressClick}
+                        >
+                            <div className="progress-bar-fill" style={{ width: `${progress}%` }} />
+                            <div className="progress-bar-thumb" style={{ left: `${progress}%` }} />
+                        </div>
+                        <span className="time-display">{formatTime(duration)}</span>
+                    </div>
+                </div>
+
+                {/* ── 3. Speed, Volume & Extra Tools ── */}
+                <div className="player-right-section">
+                    {/* Speed Selector */}
+                    <div className="speed-dropdown-wrap">
+                        <button
+                            className="tool-btn speed-btn"
+                            onClick={() => setShowSpeed(!showSpeed)}
+                            title="Playback Speed"
+                        >
+                            <Gauge size={14} />
+                            <span>{speed}×</span>
+                        </button>
+                        {showSpeed && (
+                            <div className="speed-menu">
+                                {SPEED_OPTIONS.map((s) => (
+                                    <button
+                                        key={s}
+                                        className={`speed-option ${s === speed ? "active" : ""}`}
+                                        onClick={() => handleSpeedChange(s)}
+                                    >
+                                        {s}×
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Volume Slider */}
+                    <div className="volume-control-wrap">
+                        <button className="tool-btn vol-btn" onClick={toggleMute} title={isMuted ? "Unmute" : "Mute"}>
+                            {isMuted || volume === 0 ? <VolumeX size={18} /> : <Volume2 size={18} />}
+                        </button>
+                        <input
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.02"
+                            value={isMuted ? 0 : volume}
+                            onChange={handleVolume}
+                            className="volume-slider"
+                            title={`Volume: ${Math.round((isMuted ? 0 : volume) * 100)}%`}
+                        />
+                    </div>
+
+                    {/* Library drawer trigger */}
+                    <button
+                        className="tool-btn library-btn"
+                        onClick={() => setIsLibraryModalOpen(true)}
+                        title="Open Song Library"
+                    >
+                        <ListMusic size={18} />
                     </button>
-                    <input
-                        type="range"
-                        min="0"
-                        max="1"
-                        step="0.05"
-                        value={isMuted ? 0 : volume}
-                        onChange={handleVolume}
-                        className="player__volume-slider"
-                    />
                 </div>
             </div>
         </div>

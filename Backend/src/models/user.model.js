@@ -1,27 +1,28 @@
 const mongoose = require("mongoose")
 
 const userSchema = new mongoose.Schema({
-    username:{
-        type:String,
-        required:[true,"Username is required"],
-        unique:[true,"Username must be unique"]
+    username: {
+        type: String,
+        required: [true, "Username is required"],
+        unique: [true, "Username must be unique"],
+        trim: true
     },
-    email:{
-        type:String,
-        required:[true,"Email must be required"],
-        unique:[true,"Email must be unique"]
+    email: {
+        type: String,
+        required: [true, "Email must be required"],
+        unique: [true, "Email must be unique"],
+        trim: true,
+        lowercase: true
     },
-    password:{
-         type:String,
-        required:[true,"password must be required"],
-        select:[false]
+    password: {
+        type: String,
+        required: [true, "Password is required"],
+        select: false
     }
+}, {
+    timestamps: true
 })
 
-const userModel = mongoose.model("users",userSchema);
+const userModel = mongoose.model("users", userSchema);
 
 module.exports = userModel
-
-//Task 
-//userSchema.pre("save",function(next)){})
-//userSchema.post("save",function(next)){})
